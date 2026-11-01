@@ -10,4 +10,4 @@ python-dotenv
 uvicorn
 python-multipart
 fastapi
-streamlit
+streamlitsentence-transformers
