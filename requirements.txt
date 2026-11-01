@@ -9,3 +9,5 @@ pydantic
 python-dotenv
 uvicorn
 python-multipart
+fastapi
+streamlit
