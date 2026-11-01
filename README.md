@@ -17,9 +17,10 @@ Built for the Express Analytics AI/ML Engineer Intern take-home assignment.
 7. [Running the Application](#running-the-application)
 8. [API Reference and Examples](#api-reference-and-examples)
 9. [Ingestion, Chunking and Embedding Strategy](#ingestion-chunking-and-embedding-strategy)
-10. [Design Decisions and Tradeoffs](#design-decisions-and-tradeoffs)
-11. [Assumptions](#assumptions)
-12. [Known Limitations and What I Would Improve](#known-limitations-and-what-i-would-improve)
+10. [Thought Process and Reasoning](#thought-process-and-reasoning)
+11. [Design Decisions and Tradeoffs](#design-decisions-and-tradeoffs)
+12. [Assumptions](#assumptions)
+13. [Known Limitations and What I Would Improve](#known-limitations-and-what-i-would-improve)
 
 ---
 
@@ -57,6 +58,22 @@ The whole flow is a LangGraph state machine, exposed through a FastAPI service (
 | **Bonus:** Streamlit UI | Implemented |
 | Query rewrite + re-retrieve with retry limit | Not yet (see [limitations](#known-limitations-and-what-i-would-improve)) |
 | Ingestion from URLs | Not yet |
+
+### Coverage of the assignment requirements
+
+| Requirement from the assignment | Where / how it is met | Status |
+|---|---|---|
+| Node 1: Query Analysis | `contextualize_question` rewrites follow-ups into standalone questions. No query-type classification. | Partial |
+| Node 2: Retrieval (vector store, top-k, source metadata) | `retrieve` + FAISS, k = 3, source kept in chunk metadata | Done |
+| Node 3: Document Grading (LLM relevant/irrelevant, filter) | `grade_documents` grades each chunk and drops irrelevant ones | Done |
+| Fallback when all documents are irrelevant | Routes to web search | Done (differs from spec) |
+| Rewrite query and re-retrieve with a retry limit | Not implemented; no retry counter in state | Missing |
+| Node 4: Generation with citations | `generate` cites sources; API returns a `sources` list | Done |
+| At least one conditional edge on grading outcome | `decide_to_generate` | Done |
+| Ingestion: load, chunk, embed, store | `ingestion.py` + `database.py` | Done (files only, no URLs) |
+| `POST /query`, `POST /ingest`, `GET /documents`, `POST /feedback` | `main.py` | Done (feedback only logged) |
+| Bonus: hallucination check, web search, memory, UI | `check_hallucination`, Tavily, per-session history, Streamlit | Done |
+| README, write-up, corpus | This file; corpus in `data/` | Done |
 
 ## Tech Stack
 
@@ -255,6 +272,48 @@ Why these choices:
 **Embeddings:** `all-MiniLM-L6-v2` is small (384 dimensions), fast on CPU, free, and requires no API key, so the project is easy for a reviewer to run.
 
 **Retrieval:** top-k = 3 by L2 distance on a flat FAISS index (exact search; fine at this corpus size).
+
+## Thought Process and Reasoning
+
+> **Write-up map:** this section explains my reasoning behind the architecture. The other parts of the write-up are in [Ingestion, Chunking and Embedding Strategy](#ingestion-chunking-and-embedding-strategy), [Assumptions](#assumptions), and [Known Limitations and What I Would Improve](#known-limitations-and-what-i-would-improve).
+
+### Starting point: what can go wrong in a basic RAG pipeline?
+
+I started from the simplest pipeline (embed the question, fetch top-k chunks, ask the LLM) and asked where it fails for technical documentation:
+
+1. **Follow-up questions break retrieval.** "What about its return type?" has no meaning to a vector store on its own.
+2. **Similarity is not relevance.** The nearest chunks can be topically close but not answer the question, and the LLM will still try to use them.
+3. **The corpus has gaps.** Some questions simply are not covered by the indexed documents.
+4. **LLMs can add details that are not in the context**, which is especially risky for code and API behaviour.
+
+Each node in the graph exists to address one of these problems.
+
+### Why each component exists
+
+| Problem | Component | Reasoning |
+|---|---|---|
+| Follow-ups lose meaning | `contextualize_question` | Rewriting the question into a standalone form *before* retrieval means the embedding captures what the user actually means. It is skipped when there is no history, so first questions cost no extra LLM call. |
+| Similarity is not relevance | `grade_documents` | A cheap binary grade per chunk (using structured output so the result is machine-readable) filters out noise before generation. This is the self-corrective part of the pipeline: the system inspects its own retrieval instead of trusting it. |
+| Corpus gaps | `web_search` fallback | When no chunk survives grading, passing an empty context to the LLM invites a guess. A web search gives it real material to work from. |
+| Unsupported claims | `check_hallucination` | A second LLM pass compares the answer to the context. If the answer is not supported, the graph does not return it. |
+| Users need to verify answers | Source metadata + citation prompt | Every chunk keeps its source path from ingestion, and the generation prompt asks the model to cite it. The API also returns a de-duplicated `sources` list. |
+
+### Why LangGraph instead of a simple chain
+
+The workflow has branches (relevant or not, grounded or not), and the grading result decides what happens next. A linear chain cannot express that cleanly. In LangGraph the shared `GraphState` makes the data flow explicit: every node reads what it needs from the state and returns only what it changes. The routing functions (`decide_to_generate`, `decide_after_hallucination_check`) are small and testable, and the graph can be extended with new nodes (for example, a query-rewrite node) without restructuring the rest.
+
+### Why these specific technology choices
+
+- **FAISS + local MiniLM embeddings:** no external service or API key is needed for retrieval, so anyone can clone and run the project. The corpus is small, so exact search on a flat index is fast enough.
+- **Groq for the LLM:** the workflow makes several LLM calls per question (rewrite, grade each chunk, generate, check). Fast inference and a free tier keep that practical.
+- **Temperature 0 everywhere:** grading and checking should be deterministic, and answers about documentation should be stable.
+- **Streamlit as a separate process:** the API stays clean and usable on its own (curl, Swagger at `/docs`), and the UI is an optional extra.
+
+### Where my first design fell short
+
+Looking back at the assignment, the part I handled least completely is the retry behaviour. I treated "no relevant documents" as a reason to go to the web, and I did not add a retry counter to the state, a query-rewrite node that loops back to retrieval, or a cap on the hallucination loop. I chose to document this openly rather than present it as finished; the fix is described in the improvements section below and is the first thing I would build next.
+
+---
 
 ## Design Decisions and Tradeoffs
 
