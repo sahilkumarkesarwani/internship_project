@@ -9,11 +9,11 @@ st.title("🤖 Technical Documentation RAG Assistant")
 st.write("Upload your technical notes, document them in the system, and chat with your AI agent.")
 
 st.sidebar.header("Document Management")
-uploaded_file = st.sidebar.file_uploader("Upload a text file", type=["txt", "md"])
+uploaded_file = st.sidebar.file_uploader("Upload a document", type=["txt", "md", "pdf"])
 
 if uploaded_file is not None:
     if st.sidebar.button("Ingest File"):
-        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "text/plain")}
+        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
         try:
             response = requests.post(f"{BACKEND_URL}/ingest", files=files)
             if response.status_code == 200:

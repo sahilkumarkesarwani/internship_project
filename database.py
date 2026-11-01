@@ -11,7 +11,6 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 PATH = "database"
 
 def get_vectorstore():
-
     index_file = os.path.join(PATH, "index.faiss")
     
     if os.path.exists(index_file):

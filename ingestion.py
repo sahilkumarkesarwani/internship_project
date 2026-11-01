@@ -12,7 +12,7 @@ def ingest_document(file_path: str) -> bool:
     else:
         loader = TextLoader(file_path, encoding='utf-8')
         
-    docs = loader.lazy_load()
+    docs = loader.load()
     
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,

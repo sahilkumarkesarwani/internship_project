@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from models import QueryRequest, QueryResponse, IngestRequest, FeedbackRequest
 from ingestion import ingest_document, get_all_documents
 from graph import rag_application
@@ -8,14 +9,15 @@ import os
 
 app = FastAPI(title="Technical RAG Assistant")
 
-chat_sessions: Dict[str, List[dict]] = {}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# @app.post("/ingest")
-# async def ingest_endpoint(request: IngestRequest):
-#     success = ingest_document(request.file_path)
-#     if not success:
-#         raise HTTPException(status_code=404, detail="File not found")
-#     return {"message": f"Successfully ingested {request.file_path}"}
+chat_sessions: Dict[str, List[dict]] = {}
 
 @app.post("/ingest")
 async def ingest_endpoint(file: UploadFile = File(...)):
