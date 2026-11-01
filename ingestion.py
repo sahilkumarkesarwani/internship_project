@@ -6,7 +6,7 @@ import os
 def ingest_document(file_path: str) -> bool:
     if not os.path.exists(file_path):
         return False
-        
+
     if file_path.lower().endswith('.pdf'):
         loader = PyPDFLoader(file_path)
     else:
@@ -28,10 +28,9 @@ def ingest_document(file_path: str) -> bool:
     return True
 
 def get_all_documents():
-    vectorstore = get_vectorstore()
-
-    if hasattr(vectorstore, "docstore") and hasattr(vectorstore.docstore, "_dict"):
-        docs = list(vectorstore.docstore._dict.values())
-        sources = set([doc.metadata.get("source", "Unknown") for doc in docs])
-        return list(sources)
-    return []
+    data_dir = "data"
+    if not os.path.exists(data_dir):
+        return []
+    
+    files = [f"data/{f}" for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))]
+    return files

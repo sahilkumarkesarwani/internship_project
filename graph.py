@@ -17,8 +17,9 @@ class GraphState(TypedDict):
     answer: str
     web_search_needed: bool
     is_grounded: bool
+    retry_count: int
 
-llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 
 def contextualize_question(state: GraphState):
     question = state["question"]
@@ -80,6 +81,7 @@ def grade_documents(state: GraphState):
 def web_search(state: GraphState):
     question = state["question"]
     documents = state.get("documents", [])
+    retry_count = state.get("retry_count", 0) 
     
     tool = TavilySearchResults(max_results=3)
     docs = tool.invoke({"query": question})
@@ -88,7 +90,9 @@ def web_search(state: GraphState):
     web_document = Document(page_content=web_results, metadata={"source": "Tavily Web Search"})
     
     documents.append(web_document)
-    return {"documents": documents, "question": question}
+    
+    # Increment loop counter
+    return {"documents": documents, "question": question, "retry_count": retry_count + 1}
 
 def generate_answer(state: GraphState):
     question = state["question"]
@@ -143,7 +147,11 @@ def decide_to_generate(state: GraphState):
 
 def decide_after_hallucination_check(state: GraphState):
     is_grounded = state.get("is_grounded", True)
+    retry_count = state.get("retry_count", 0)
+    
     if is_grounded:
+        return "grounded"
+    elif retry_count >= 2: 
         return "grounded"
     else:
         return "hallucinated"

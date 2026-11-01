@@ -1,21 +1,12 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
 from models import QueryRequest, QueryResponse, IngestRequest, FeedbackRequest
 from ingestion import ingest_document, get_all_documents
 from graph import rag_application
 from typing import Dict, List
 import os
-
+import uuid
 
 app = FastAPI(title="Technical RAG Assistant")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 chat_sessions: Dict[str, List[dict]] = {}
 
@@ -23,7 +14,10 @@ chat_sessions: Dict[str, List[dict]] = {}
 async def ingest_endpoint(file: UploadFile = File(...)):
     os.makedirs("data", exist_ok=True)
     
-    file_path = f"data/{file.filename}"
+    # Append UUID to prevent file collisions
+    unique_filename = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = f"data/{unique_filename}"
+    
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
         
@@ -49,7 +43,8 @@ async def query_endpoint(request: QueryRequest):
         "documents": [],
         "answer": "",
         "web_search_needed": False,
-        "is_grounded": True
+        "is_grounded": True,
+        "retry_count": 0  
     }
     
     result = rag_application.invoke(initial_state)
