@@ -1,0 +1,11 @@
+langchain
+langchain-groq
+langchain-huggingface
+langchain-community
+langgraph
+faiss-cpu
+tavily-python
+pydantic
+python-dotenv
+uvicorn
+python-multipart
